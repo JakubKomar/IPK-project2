@@ -6,9 +6,10 @@ description:    IPK projekt2-snifer paketů
 #include "main.h"
 
 bool d=false;   //debug var
-
 int main(int argc, char **argv) 
 {
+    signal(SIGINT, userExit);
+    signal(SIGTERM, userExit);
     string interface="";
     int port=-1,n=-1;
     bool I=false,tcp=false, udp=false,arp=false,icmp=false;
@@ -80,38 +81,36 @@ int main(int argc, char **argv)
         displayInterfaces();
 
 
-    return 0;
-}
-void displayInterfaces(){
-    pcap_if_t *alldevs;
-    pcap_if_t *d;
-    int i=0;
-    char errbuf[PCAP_ERRBUF_SIZE];
-    
-    /* Retrieve the device list from the local machine */
-    if (pcap_findalldevs(&alldevs,errbuf) == -1)
-    {
-        fprintf(stderr,"Error in pcap_findalldevs_ex: %s\n", errbuf);
-        exit(1);
-    }
-    
-    /* Print the list */
-    for(d= alldevs; d != NULL; d= d->next)
-    {
-        printf("%d. %s", ++i, d->name);
-        if (d->description)
-            printf(" (%s)\n", d->description);
-        else
-            printf(" (No description available)\n");
-    }
-    
-    if (i == 0)
-    {
-        printf("\nNo interfaces found! Make sure WinPcap is installed.\n");
-        return;
+    pcap_t *handle;
+    char error_buffer[PCAP_ERRBUF_SIZE];
+	handle = pcap_open_live(interface.c_str(), BUFSIZ, 1, 1000, error_buffer);
+	if (handle == NULL) {
+		fprintf(stderr, "Couldn't open device %s: %s\n", interface.c_str(), error_buffer);
+		return(2);
     }
 
-    /* We don't need any more the device list. Free it */
+
+    
+
+    startSnifing();
+    return 0;
+}
+void startSnifing(){
+
+}
+void displayInterfaces(){
+    char error_buffer[PCAP_ERRBUF_SIZE];
+    pcap_if_t *alldevs;
+    if (pcap_findalldevs(&alldevs, error_buffer) < 0) {
+        cerr<<"Error in pcap_findalldevs()";
+        exit(-1);
+    }
+    int i = 1;
+    pcap_if_t *temp;
+    cout<<"Active network interfaces: \n";
+    for (temp = alldevs; temp!=NULL; temp = temp->next) {
+        printf("%-2d:%s\n", i++, temp->name);
+    }
     pcap_freealldevs(alldevs);
     exit(0);
 }
@@ -131,4 +130,8 @@ void debug(string masegge)
 {
     if(d)
         cerr<<masegge;
+}
+void userExit(int signum ){
+
+    exit(-2);
 }
