@@ -13,12 +13,13 @@ int main(int argc, char **argv)
 
     string interface="";    //rozhraní na kterém se bude zachytávat
     int port=-1,n=1;        //port pro zachytávání, počet paketů na zachycení 
-    bool tcp=false, udp=false,arp=false,icmp=false; //jaké protokoly se budou zachytávat
-    argParste(&udp,&tcp,&arp,&icmp,&interface,&n,&port,argc,argv);  //parsování vstupních argumentů
+    bool tcp=false, udp=false,arp=false,icmp=false,ipv4=false,ipv6=false; //jaké protokoly se budou zachytávat
+    argParste(&udp,&tcp,&arp,&icmp,&interface,&n,&port,argc,argv,&ipv4,&ipv6);  //parsování vstupních argumentů
     if(interface=="")       //pokud není zadán interface, vypíšou se dostupné interfacy
         displayInterfaces();
     
     char errbuf[PCAP_ERRBUF_SIZE];      
+
     bpf_u_int32 mask;		//mask of interface
 	bpf_u_int32 net;		//ip of interface
 
@@ -29,7 +30,7 @@ int main(int argc, char **argv)
 	if (handle == NULL) 
         error(4,"Couldn't open nework interface\n");
 
-    string filter_exp=filterGen(port,tcp,udp,arp,icmp);     //generování filtru
+    string filter_exp=filterGen(port,tcp,udp,arp,icmp,ipv4,ipv6);     //generování filtru
     struct bpf_program fp;	
     if (pcap_compile(handle, &fp, filter_exp.c_str(), 0, mask))//spracování filtru 
         error(3,"Couldn't parse filter\n");
@@ -53,22 +54,22 @@ void sniffPacket(){
     RFC3339();  //výpis času
     switch (ntohs(ethernet->ether_type)){
         case 0x0800:    //ipv4
-            debug("ipv4\n");
+            debug("\nselector: ipv4\n");
             const struct ip *ip;
             ip = (struct ip*)(packet + SIZE_ETHERNET);
             switch (ip->ip_p){
                 case 0x01:
-                    debug("icmp packet\n");
+                    debug("\nprotokol selector: icmp packet\n");
                     cout<<inet_ntoa(ip->ip_src)<<" > "<<inet_ntoa(ip->ip_dst);
                     break;
                 case 0x11:
-                    debug("udp packet\n");
+                    debug("\nprotokol selector: udp packet\n");
                     const struct udphdr *udpH;
                     udpH = (struct udphdr*)(packet + SIZE_ETHERNET+(ip->ip_hl)*4);
                     cout<<inet_ntoa(ip->ip_src)<<" : "<<ntohs(udpH->uh_sport)<<" > "<<inet_ntoa(ip->ip_dst)<<" : "<<ntohs(udpH->uh_dport);
                     break;
                 case 0x06:
-                    debug("tcp packet\n");
+                    debug("\nprotokol selector:tcp packet\n");
                     const struct tcphdr *tcpH;
                     tcpH = (struct tcphdr*)(packet + SIZE_ETHERNET+(ip->ip_hl)*4);
                     cout<<inet_ntoa(ip->ip_src)<<" : "<<ntohs(tcpH->th_sport)<<" > "<<inet_ntoa(ip->ip_dst)<<" : "<<ntohs(tcpH->th_dport);
@@ -79,13 +80,44 @@ void sniffPacket(){
             }                     
             break;
         case 0x86DD:    //ipv6
-            debug("ipv6 packet\n");
-            const struct ip6_hdr *ip6;
+            debug("\nselector: ipv6 packet\n");
+            ip6_hdr *ip6;
             ip6 = (struct ip6_hdr*)(packet + SIZE_ETHERNET);
-                                
+            char sourceIp[256];
+            char destinationIp[256];
+            inet_ntop(AF_INET6, &(ip6->ip6_src), sourceIp, INET6_ADDRSTRLEN);
+            inet_ntop(AF_INET6, &(ip6->ip6_dst), destinationIp, INET6_ADDRSTRLEN);
+
+            int headerSize=sizeof(ip6_hdr);
+            for( auto nextH=ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt;nextH!=59;)
+            {
+                switch (nextH)
+                {
+                case 0:
+                    /* code */
+                    break;
+                case 43:
+                    /* code */
+                    break;
+                case 44:
+                    /* code */
+                    break;
+                case 51:
+                    /* code */
+                    break;
+                default:
+                    break;
+                }
+
+            }
+
+            cout<<sourceIp<<" > "<<destinationIp;
+
+
             break;
         case 0x0806:    //arp
-            debug("arp packet\n");
+            debug("\nselector: arp packet\n");
+            cout<<ether_ntoa((struct ether_addr*)ethernet->ether_shost)<<" > "<<ether_ntoa((struct ether_addr*)ethernet->ether_dhost);
             break;
         default:
             cout<<"unsuported packet type, snifing next packet...\n";
@@ -97,25 +129,33 @@ void sniffPacket(){
     {
         printf("x%04x: ",j*16);         //výpis ofsetu
         string assci;                   //řetězec pro assci zápis
-        for (int i=0;i<16;i++){         
+        int i=0;
+        for (i;i<16;i++){         
             int index=j*16+i;
             if(index>=header.caplen)    //ukončující podmínka
                 break;
             printf("%02x ",int(packet[index])); //výpis hexadecimální číslice z paketu
             assci.push_back(packet[index]>20&&packet[index]<127?packet[index]:'.'); //uložení hexadecomálního zápisu-pokud je znak netisknutelný ukládá se tečka
         }
+        for(i;i<16;i++){cout<<"   ";}//padding pro v případě malých dat
         cout<<assci<<"\n";  //výpis ascci reprezentace
         if(j==0||j==2)
             cout<<"\n";
     }
     cout<<"\n";     
 }
-string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp){        //generuje filter pro zachytávač paketů, podle vstupních argumentů
+string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp,bool ipv4,bool ipv6){        //generuje filter pro zachytávač paketů, podle vstupních argumentů
     string filter_exp;
     if(port>0&&port<65535)
     {
         filter_exp="port "+to_string(port)+" and ";
     }
+    if(ipv4&&ipv6)
+        error(1,"ip verzion selector errr\n");
+    if(ipv4)
+        filter_exp=filter_exp+"ip and ";
+    if(ipv6)
+        filter_exp=filter_exp+"ip6 and ";
     if (tcp||udp||arp||icmp)
     {
          filter_exp=filter_exp+"(";
@@ -125,7 +165,7 @@ string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp){        //generu
             if(tcp)
                 filter_exp=filter_exp+" or udp";
             else 
-                filter_exp=filter_exp+"udp";
+                filter_exp=filter_exp+"udp ";
         }
         if(arp){
             if(tcp||udp)
@@ -135,9 +175,9 @@ string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp){        //generu
         }
         if(icmp){
             if(tcp||udp||arp)
-                filter_exp=filter_exp+" or icmp";
+                filter_exp=filter_exp+" or icmp or icmp6";
             else 
-                filter_exp=filter_exp+"icmp";
+                filter_exp=filter_exp+"icmp or icmp6";
         }
         filter_exp=filter_exp+")";
     }
@@ -181,7 +221,7 @@ int safeStoi(string String){        //bezpečná funkce pro převod stringu na i
 void debug(string masegge){     //pokud je globální proměnná d nastavená na true tiskne debugovací výpisy na stderr
     if(d){cerr<<masegge;}
 }
-void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n,int *port,int argc,char **argv)    //funkce na parsování argmuntů
+void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n,int *port,int argc,char **argv,bool *ipv4,bool *ipv6)    //funkce na parsování argmuntů
 {
     bool I=false;
     for(int i=1;i<argc;i++){
@@ -220,6 +260,12 @@ void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n
         }
         else if(!(strcmp(argv[i],"-d"))){
             d=true;
+        }
+        else if(!(strcmp(argv[i],"--ipv4"))){
+            *ipv4=true;
+        }
+        else if(!(strcmp(argv[i],"--ipv6"))){
+            *ipv6=true;
         }
         else if(!(strcmp(argv[i],"-h"))||!(strcmp(argv[i],"--help"))){
             cerr<<"./ipk-sniffer [-i rozhraní | --interface rozhraní] {-p ­­port} {[--tcp|-t] [--udp|-u] [--arp] [--icmp] } {-n num}\n";
