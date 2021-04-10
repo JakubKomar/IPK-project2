@@ -3,4 +3,4 @@ all: main.cpp
 	g++ main.cpp -o program -lpcap
 
 clean: 
-	$(RM) program.exe
+	$(RM) program

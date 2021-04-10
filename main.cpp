@@ -6,101 +6,111 @@ description:    IPK projekt2-snifer paketů
 #include "main.h"
 
 bool d=false;   //debug var
+pcap_t *handle=NULL; //ukazatel popisovač interfacu
 int main(int argc, char **argv) 
 {
-    signal(SIGINT, userExit);signal(SIGTERM, userExit);
-    string interface="";
-    int port=-1,n=1;
-    bool tcp=false, udp=false,arp=false,icmp=false;
-    argParste(&udp,&tcp,&arp,&icmp,&interface,&n,&port,argc,argv);
-    if(interface=="")
+    signal(SIGINT, userExit);signal(SIGTERM, userExit); //připojení ukončujícíhc signálů
+
+    string interface="";    //rozhraní na kterém se bude zachytávat
+    int port=-1,n=1;        //port pro zachytávání, počet paketů na zachycení 
+    bool tcp=false, udp=false,arp=false,icmp=false; //jaké protokoly se budou zachytávat
+    argParste(&udp,&tcp,&arp,&icmp,&interface,&n,&port,argc,argv);  //parsování vstupních argumentů
+    if(interface=="")       //pokud není zadán interface, vypíšou se dostupné interfacy
         displayInterfaces();
     
-    char errbuf[PCAP_ERRBUF_SIZE];
+    char errbuf[PCAP_ERRBUF_SIZE];      
+    bpf_u_int32 mask;		//mask of interface
+	bpf_u_int32 net;		//ip of interface
 
-    bpf_u_int32 mask;		/* Our netmask */
-	bpf_u_int32 net;		/* Our IP */
-    if (pcap_lookupnet(interface.c_str(), &net, &mask, errbuf) == -1) {
+    if (pcap_lookupnet(interface.c_str(), &net, &mask, errbuf))
         error(4,"Couldn't get netmask/ip for device\n");
-	}
-    debug("my interface:\n");
-    debug("ip:"+dec2Ip(net)+"\n");
-    debug("mask:"+dec2Ip(mask)+"\n");
-    debug("---------------------------------\n");
 
-    pcap_t *handle= pcap_open_live(interface.c_str(), BUFSIZ, 1, 1000, errbuf);
-	if (handle == NULL) {
+    handle= pcap_open_live(interface.c_str(), BUFSIZ, 1, 1000, errbuf); 
+	if (handle == NULL) 
         error(4,"Couldn't open nework interface\n");
-    }
-    string filter_exp=filterGen(port,tcp,udp,arp,icmp);
+
+    string filter_exp=filterGen(port,tcp,udp,arp,icmp);     //generování filtru
     struct bpf_program fp;	
-    if (pcap_compile(handle, &fp, filter_exp.c_str(), 0, net) == -1) {
+    if (pcap_compile(handle, &fp, filter_exp.c_str(), 0, mask))//spracování filtru 
         error(3,"Couldn't parse filter\n");
-	}
-    if (pcap_setfilter(handle, &fp) == -1) {
-        fprintf(stderr, "Couldn't install filter\n");
-        return(2);
-	}
-    struct pcap_pkthdr header;
+
+    if (pcap_setfilter(handle, &fp))
+        error(2,"Couldn't install filter\n");
+
     for(int i=0;i<n;i++){
-        const u_char *packet = pcap_next(handle, &header);
-		//printf("Jacked a packet with length of [%d]\n", header.len);
-          
-
-        const struct ether_header *ethernet;
-        ethernet= (struct ether_header*)(packet);
-        
-        RFC3339();
-        cout<<",length "<<header.len<<" bytes\n";
-        switch (ntohs(ethernet->ether_type)){
-            case 0x0800:    //ipv4
-                debug("ipv4\n");
-                const struct ip *ip;
-                ip = (struct ip*)(packet + SIZE_ETHERNET);
-                switch (ip->ip_p){
-                    case 0x01:
-                        debug("icmp packet\n");
-                        cout<<inet_ntoa(ip->ip_src)<<" > "<<inet_ntoa(ip->ip_dst)<<"\n";
-                        break;
-                    case 0x11:
-                        debug("udp packet\n");
-                        const struct udphdr *udpH;
-                        udpH = (struct udphdr*)(packet + SIZE_ETHERNET+(ip->ip_hl)*4);
-                        cout<<inet_ntoa(ip->ip_src)<<":"<<ntohs(udpH->uh_sport)<<" > "<<inet_ntoa(ip->ip_dst)<<":"<<ntohs(udpH->uh_dport)<<"\n";
-                        break;
-                    case 0x06:
-                        debug("tcp packet\n");
-                        const struct tcphdr *tcpH;
-                        tcpH = (struct tcphdr*)(packet + SIZE_ETHERNET+(ip->ip_hl)*4);
-                        cout<<inet_ntoa(ip->ip_src)<<":"<<ntohs(tcpH->th_sport)<<" > "<<inet_ntoa(ip->ip_dst)<<":"<<ntohs(tcpH->th_dport)<<"\n";
-                        break;    
-                    default:
-                        cerr<<"unsuported protokol, snifing next packet...\n";
-                        continue;break;
-                }                     
-                break;
-            case 0x86DD:    //ipv6
-                debug("ipv6 packet\n");
-                const struct ip6_hdr *ip6;
-                ip6 = (struct ip6_hdr*)(packet + SIZE_ETHERNET);
-                                   
-                break;
-            case 0x0806:    //arp
-                 debug("arp packet\n");
-                break;
-            default:
-                cerr<<"unsuported packet type, snifing next packet...\n";
-                break;
-        }
-
-        
+        sniffPacket();
     }
 	pcap_close(handle);
-    
-
     return 0;
 }
-string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp){
+void sniffPacket(){
+    struct pcap_pkthdr header;
+    const u_char *packet = pcap_next(handle, &header);  //získání
+
+    const struct ether_header *ethernet;
+    ethernet= (struct ether_header*)(packet);
+    
+    RFC3339();  //výpis času
+    switch (ntohs(ethernet->ether_type)){
+        case 0x0800:    //ipv4
+            debug("ipv4\n");
+            const struct ip *ip;
+            ip = (struct ip*)(packet + SIZE_ETHERNET);
+            switch (ip->ip_p){
+                case 0x01:
+                    debug("icmp packet\n");
+                    cout<<inet_ntoa(ip->ip_src)<<" > "<<inet_ntoa(ip->ip_dst);
+                    break;
+                case 0x11:
+                    debug("udp packet\n");
+                    const struct udphdr *udpH;
+                    udpH = (struct udphdr*)(packet + SIZE_ETHERNET+(ip->ip_hl)*4);
+                    cout<<inet_ntoa(ip->ip_src)<<" : "<<ntohs(udpH->uh_sport)<<" > "<<inet_ntoa(ip->ip_dst)<<" : "<<ntohs(udpH->uh_dport);
+                    break;
+                case 0x06:
+                    debug("tcp packet\n");
+                    const struct tcphdr *tcpH;
+                    tcpH = (struct tcphdr*)(packet + SIZE_ETHERNET+(ip->ip_hl)*4);
+                    cout<<inet_ntoa(ip->ip_src)<<" : "<<ntohs(tcpH->th_sport)<<" > "<<inet_ntoa(ip->ip_dst)<<" : "<<ntohs(tcpH->th_dport);
+                    break;    
+                default:
+                    cerr<<"unsuported protokol, snifing next packet...\n";
+                    return;break;
+            }                     
+            break;
+        case 0x86DD:    //ipv6
+            debug("ipv6 packet\n");
+            const struct ip6_hdr *ip6;
+            ip6 = (struct ip6_hdr*)(packet + SIZE_ETHERNET);
+                                
+            break;
+        case 0x0806:    //arp
+            debug("arp packet\n");
+            break;
+        default:
+            cout<<"unsuported packet type, snifing next packet...\n";
+            return;
+            break;
+    }
+    cout<<", length "<<header.caplen<<" bytes\n";
+    for(int j=0;j<header.caplen/16+((header.caplen%16)&&1);j++)   //přičte se jendička pokud je zbytek po celočíselném dělení
+    {
+        printf("x%04x: ",j*16);         //výpis ofsetu
+        string assci;                   //řetězec pro assci zápis
+        for (int i=0;i<16;i++){         
+            int index=j*16+i;
+            if(index>=header.caplen)    //ukončující podmínka
+                break;
+            printf("%02x ",int(packet[index])); //výpis hexadecimální číslice z paketu
+            assci.push_back(packet[index]>20&&packet[index]<127?packet[index]:'.'); //uložení hexadecomálního zápisu-pokud je znak netisknutelný ukládá se tečka
+        }
+        cout<<assci<<"\n";  //výpis ascci reprezentace
+        if(j==0||j==2)
+            cout<<"\n";
+    }
+    cout<<"\n";     
+}
+string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp){        //generuje filter pro zachytávač paketů, podle vstupních argumentů
     string filter_exp;
     if(port>0&&port<65535)
     {
@@ -141,7 +151,7 @@ string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp){
 void startSnifing(){
 
 }
-void displayInterfaces(){
+void displayInterfaces(){       //vypisuje všechna dostupné interfacy
     char error_buffer[PCAP_ERRBUF_SIZE];
     pcap_if_t *alldevs;
     if (pcap_findalldevs(&alldevs, error_buffer) < 0) {
@@ -158,7 +168,7 @@ void displayInterfaces(){
     exit(0);
 }
 
-int safeStoi(string String){
+int safeStoi(string String){        //bezpečná funkce pro převod stringu na int
     int number=0;
     try{
        number=stoi(String);
@@ -168,19 +178,10 @@ int safeStoi(string String){
     }
     return number;
 }
-
-string dec2Ip(int dec){
-    unsigned char bytes[4];
-    bytes[1] = dec & 0xFF;
-    bytes[2] = (dec >> 8) & 0xFF;
-    bytes[3] = (dec >> 16) & 0xFF;
-    bytes[4] = (dec >> 24) & 0xFF;   
-    return to_string(bytes[1])+"."+to_string(bytes[2])+"."+to_string(bytes[3])+"."+to_string(bytes[4]);        
-}
-void debug(string masegge){
+void debug(string masegge){     //pokud je globální proměnná d nastavená na true tiskne debugovací výpisy na stderr
     if(d){cerr<<masegge;}
 }
-void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n,int *port,int argc,char **argv)
+void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n,int *port,int argc,char **argv)    //funkce na parsování argmuntů
 {
     bool I=false;
     for(int i=1;i<argc;i++){
@@ -230,8 +231,7 @@ void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n
     }
     if(!I)
     {
-        cerr<<"Missing interface parameter\n";
-        exit(-1);
+        error(1,"Missing interface parameter\n");
     }
     debug("program runed whith this params:\n");
     debug("tcp:"+std::to_string(*tcp)+"\n");
@@ -243,21 +243,24 @@ void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n
     debug("n:"+std::to_string(*n)+"\n");
     debug("---------------------------------\n");
 }
-void RFC3339(){
+void RFC3339(){     //vypíše časové razítko v RFC3339 formátu
     time_t timer = time(0);
     tm * tm_info = localtime(&timer);
-    struct timeval tp;
-    gettimeofday(&tp, NULL);
+    struct timeval tp;  
+    gettimeofday(&tp, NULL);    //čas v ms 
     int ms = tp.tv_usec / 1000;
 
     printf("%d-%02d-%02d-T%02d:%02d:%02d.%03d ",tm_info->tm_year+1900,tm_info->tm_mon+1,tm_info->tm_mday,tm_info->tm_hour,tm_info->tm_min,tm_info->tm_sec,ms);
-    int timezone=(tm_info->tm_hour)-(gmtime(&timer)->tm_hour);
+    int timezone=(tm_info->tm_hour)-(gmtime(&timer)->tm_hour);  //výpočet časového posunu
     printf("%s%02d:00 ",timezone>0?"+":"-",abs(timezone));
 }
-void userExit(int signum ){
-    exit(-2);
+void userExit(int signum ){     //pokud uživatel násilně ukončí program
+    pcap_close(handle);
+    exit(0);
 }
-void error(int errCode,string massege){
+void error(int errCode,string massege){ //funkce pro výpis chyby a ukončení programu
+    if(handle)
+        pcap_close(handle);
     cerr<<massege;
     exit(errCode);
 }
