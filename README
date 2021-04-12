@@ -1,0 +1,39 @@
+autor:          Jakub Komárek
+login:          xkomar33
+description:    IPK projekt2-snifer of packets
+
+how to run:
+sudo ./ipk-sniffer [-i interfaceName | --interface interfaceName] {-p ­­port} {[--tcp|-t] [--udp|-u] [--arp] [--icmp]  [--ipv4]  [--ipv6] } {-n num}
+example run:
+sudo ./program -i ens36   -p 666 -u -n 3
+
+extension: you can select which IP protocol you want: params  [--ipv4]  [--ipv6]
+This program snifing packet on ethernet interface, you can select which types of packet you want snif by parameters.
+Suported protocols are:  UDP TCP IPv4 IPv6 ARP ICMP ICMP6 ETHERNET
+After packet is snifed program prints few infos about packet and print whole packet in hexadecimal form
+
+
+files:
+main.cpp
+main.h
+makefile
+README
+manual.pdf
+
+required liberies:
+<iostream>         
+<stdio.h>
+<string> 
+<string.h> 
+<signal.h>
+<time.h>               
+<sys/time.h>           
+<pcap.h>               
+<netinet/ether.h>      
+<netinet/if_ether.h>  
+<netinet/ip.h>        
+<netinet/ip6.h>       
+<netinet/tcp.h>       
+<netinet/udp.h>        
+<netinet/ip_icmp.h>   
+

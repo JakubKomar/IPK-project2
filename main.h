@@ -19,12 +19,17 @@ description:    IPK projekt2-snifer paketů
 #include <netinet/tcp.h>        //struktury pro tcp hlavičku
 #include <netinet/udp.h>        //struktury pro udp hlavičku
 #include <netinet/ip_icmp.h>    //struktury pro icmp hlavičku
-#include "netinet/arp.h"    //struktury pro icmp hlavičku
+
+
 
 
 using namespace std;
 
+
+
+
 #define SIZE_ETHERNET 14        //bytová délka ethernetové hlavičky
+#define SIZE_IP6 36             //bytová délka záklaní ipv6 hlavičky
 
 int safeStoi(string String);
 void debug(string masegge);
