@@ -9,11 +9,14 @@ sudo ./program -i ens36   -p 666 -u -n 3
 
 extension: you can select which IP protocol you want: params  [--ipv4]  [--ipv6]
 This program snifing packet on ethernet interface, you can select which types of packet you want snif by parameters.
-Suported protocols are:  UDP TCP IPv4 IPv6 ARP ICMP ICMP6 ETHERNET
+Suported data link protocols are: ETHERNET
+Suported network protocols:  IPv4 IPv6 ARP
+Suported transport protocols: UDP TCP ICMP
+If no protocol is selcted, program sniffing all suported protocols
 After packet is snifed program prints few infos about packet and print whole packet in hexadecimal form
 
 
-files:
+files list:
 main.cpp
 main.h
 makefile

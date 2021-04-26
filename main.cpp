@@ -93,7 +93,7 @@ void sniffPacket(){
         inet_ntop(AF_INET6, &(ip6->ip6_src), sourceIp, INET6_ADDRSTRLEN); 
         inet_ntop(AF_INET6, &(ip6->ip6_dst), destinationIp, INET6_ADDRSTRLEN);
 
-        int headerShift=SIZE_ETHERNET+6;     //+6 je posun k první hlavičce v paketu    //obecně značí posun v paketu k aktuálně zpracovávané hlavičce
+        int headerShift=SIZE_ETHERNET+6;     //+6 je posun k první hlavičce v paketu    //obecně proměnná symbolizuje posun v paketu k aktuálně zpracovávané hlavičce
         bool cont=true; //rozhoduje zdali se mají spracovávat další rozšiřující hlavičky 
         bool first=true;//první iterace cyklu na spracování ipv6 hlavičky
         bool udp=false; 
@@ -220,24 +220,20 @@ string filterGen(int port,bool tcp,bool udp,bool arp,bool icmp,bool ipv4,bool ip
         filter_exp=filter_exp+")";
     }
     else
-    {
         filter_exp=filter_exp+"(tcp or udp or arp or icmp or icmp6)";
-    }
     debug("filtering exp::\n"+filter_exp+"\n---------------------------------\n");
     return filter_exp;
 }
-void displayInterfaces(){       //vypisuje všechna dostupné interfacy
+void displayInterfaces(){       //vypisuje všechny dostupné interfacy
     char error_buffer[PCAP_ERRBUF_SIZE];
     pcap_if_t *alldevs;
-    if (pcap_findalldevs(&alldevs, error_buffer) < 0) {
-        cerr<<"Error in pcap_findalldevs()";
-        exit(-1);
-    }
-    int i = 1;
-    pcap_if_t *temp;
-    cout<<"Active network interfaces: \n";
-    for (temp = alldevs; temp!=NULL; temp = temp->next) {
-        printf("%-2d:%s\n", i++, temp->name);
+    if (pcap_findalldevs(&alldevs, error_buffer) < 0) 
+        error(8,"Error in pcap_findalldevs()");
+    pcap_if_t *temp=alldevs;
+    cout<<"List of active interfaces:\n";
+    while(temp!=NULL){
+        printf("%s\n", temp->name);
+        temp = temp->next;
     }
     pcap_freealldevs(alldevs);
     exit(0);
@@ -271,51 +267,42 @@ void argParste(bool *udp,bool *tcp,bool *arp,bool *icmp,string *interface,int *n
         else if(!(strcmp(argv[i],"-n"))){
             if(i+1<argc)
                 *n=safeStoi(argv[i+1]);
-            else{
+            else
                 error(1,"Missing value after arg, try --help\n");
-            }
             i++;
         }
         else if(!(strcmp(argv[i],"-i"))||!(strcmp(argv[i],"--interface"))){
             I=true;
             if(i+1<argc)
                 *interface=argv[i+1];
-            else{
+            else
                 break;
-            }
             i++;
         }
         else if(!(strcmp(argv[i],"-p"))){
             if(i+1<argc)
                 *port=safeStoi(argv[i+1]);
-            else{
+            else
                 error(1,"Missing value after arg, try --help\n");
-            }
             i++;
         }
-        else if(!(strcmp(argv[i],"-d"))){
+        else if(!(strcmp(argv[i],"-d")))
             d=true;
-        }
-        else if(!(strcmp(argv[i],"--ipv4"))){
+        else if(!(strcmp(argv[i],"--ipv4")))
             *ipv4=true;
-        }
-        else if(!(strcmp(argv[i],"--ipv6"))){
+        else if(!(strcmp(argv[i],"--ipv6")))
             *ipv6=true;
-        }
         else if(!(strcmp(argv[i],"-h"))||!(strcmp(argv[i],"--help"))){
             cerr<<"./ipk-sniffer [-i interfaceName | --interface interfaceName] {-p ­­port} {[--tcp|-t] [--udp|-u] [--arp] [--icmp]  [--ipv4]  [--ipv6] } {-n num}\n";
             cerr<<"This program snifing packet on ethernet interface, you can select which types of packet you want snif. \n";
             cerr<<"After packet is snifed program prints few infos about packet and print whole packet in hexadecimal form\n";
             exit(-1);
         }
-        else{
+        else
             error(1,"Unrecognizeble parameter, try --help\n");
-        }
     }
     if(!I)
-    {
         error(1,"Missing interface parameter\n");
-    }
     debug("program runed whith this params:\n");
     debug("tcp:"+std::to_string(*tcp)+"\n");
     debug("udp:"+std::to_string(*udp)+"\n");
